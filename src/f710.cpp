@@ -40,8 +40,79 @@
 #define BUTTON_EVENT_NUMBER_RT 7
 #define BUTTON_EVENT_NUMBER_RB 5
 
+#define CONST_SELECT_TIMEOUT_INTERVAL_MS 500
+#define CONST_SELECT_TIMEOUT_EPSILON_MS 50
 
 namespace f710 {
+    /**
+     * This struct is a convenient way to hold values that allow ongoing calculation of
+     * what the timeout value should be for the next select call
+     */
+    struct SelectTimeoutContext {
+        Time tnow;
+        Time target_wakeup;
+        Time last_target_wake_up;
+        /**
+         * This is the desired interval between select timeouts in millisecs
+         */
+        uint64_t desired_select_timeout_interval;
+        uint64_t epsilon_value;
+        Time computed_next_timeout_value_ms;
+        SelectTimeoutContext(uint64_t timeout_interval, uint64_t epsilon)
+        : desired_select_timeout_interval(timeout_interval), epsilon_value(epsilon)
+        {
+            tnow = Time::now();
+            computed_next_timeout_value_ms = tnow;
+            target_wakeup = tnow;
+            last_target_wake_up = tnow;
+        }
+        timeval current_timeout()
+        {
+            return computed_next_timeout_value_ms.as_timeval();
+        }
+        /**
+         * Computes the next timeout interval as a `timeval` for the select call when we are processing a
+         * select timeout
+         */
+        timeval after_select_timedout()
+        {
+            tnow = Time::now();
+            target_wakeup = tnow.add_ms(desired_select_timeout_interval);
+            computed_next_timeout_value_ms = Time::from_ms(desired_select_timeout_interval);
+            last_target_wake_up = target_wakeup;
+            return computed_next_timeout_value_ms.as_timeval();
+        }
+        /**
+         * Calculate the next timeout value as a `timeval` when the most recent return from select was
+         * because of a js_event and subsequent to that we got an EAGAIN.
+         *
+         * Reading js_events takes time. The goal here is to not let the reading of events extend the
+         * period between select timeout expiries. So we try to calculate indirectly how much the next T/O
+         * interval should be in order to get the T/O "back on schedule"
+         */
+        timeval after_js_event()
+        {
+            // compute the select timeout interval
+            tnow = Time::now();
+            Time tmp = last_target_wake_up.add_ms(100);
+            if(Time::is_after(last_target_wake_up, tnow.add_ms(epsilon_value))) {
+                // there is at least 100ms before the previously computed wakeup time
+
+            } else if(Time::is_after(last_target_wake_up, tnow)) {
+                // the last computed wake-up time is after tnow() but
+                // there is less than 100 ms between now and the last computed wakeup time
+                // extend the wake-up time
+
+                last_target_wake_up = last_target_wake_up.add_ms(epsilon_value);
+            } else {
+                // last computed wake-up time is NOT after tnow. Set wakeup time to
+                //tnow + 100ms
+                last_target_wake_up = tnow.add_ms(epsilon_value);
+            }
+            computed_next_timeout_value_ms = Time::diff_ms(last_target_wake_up, tnow);
+            return computed_next_timeout_value_ms.as_timeval();
+        }
+    };
 
 /**
  * This class represents one of the axis of one of the sticks on a F710
@@ -56,37 +127,23 @@ namespace f710 {
  * of values/events.
  */
     struct StreamDevice {
-        /**
-         * The system time of the end of the next interval
-         */
-//        ::f710::Time time_of_last_event;
-//        ::f710::Time time_of_first_new_event;
-
         uint32_t latest_event_time;
         int16_t  latest_event_value;
         bool     is_new_event;
-
-        uint64_t interval_length_in_ms;
-        bool enabled;
-        int state;
         int event_id;
 
         StreamDevice() = default;
 
-        StreamDevice(int eventid, uint64_t interval_ms)
-                : event_id(eventid),
-                  interval_length_in_ms(interval_ms)
+        StreamDevice(int eventid)
+                : event_id(eventid)
         {
-
-            state = 0;
             is_new_event = false;
             latest_event_time = 0;
             latest_event_value = 0;
-            enabled = true;
         }
 
         /**
-         * Records the most recent event and reset the point in time at which we will send that event
+         * Records the most recent event
          * @param event_time  The time value in the most recent event
          * @param value       The stick position in the most recent event
          */
@@ -121,16 +178,14 @@ namespace f710 {
         m_joy_dev_name = device_path;
         m_is_open = false;
         m_joy_dev = "";
-        left_stick_fwd_bkwd = new StreamDevice(AXIS_EVENT_LEFT_STICK_FWD_BKWD_EVENT_NUMBER, 1000);
-        right_stick_fwd_bkwd = new StreamDevice(AXIS_EVENT_RIGHT_STICK_FWD_BKWD_EVENT_NUMBER, 1000);
+        left_stick_fwd_bkwd = new StreamDevice(AXIS_EVENT_LEFT_STICK_FWD_BKWD_EVENT_NUMBER);
+        right_stick_fwd_bkwd = new StreamDevice(AXIS_EVENT_RIGHT_STICK_FWD_BKWD_EVENT_NUMBER);
     }
 
     int f710::F710::run() {
         js_event event;
         fd_set set;
         int joy_fd;
-        #define CONST_SELECT_TIMEOUT_INTERVAL_MS 500
-        #define CONST_SELECT_TIMEOUT_EPSILON_MS 50
         // Big while loop opens, publishes
         while (true) {
             this->m_is_open = false;
@@ -146,17 +201,24 @@ namespace f710 {
 //            tv.tv_sec = 100;
 //            tv.tv_usec = 0;
             double val;  // Temporary variable to hold event values
+#define XTO_OLD
+#ifdef TO_OLD
             Time tnow = Time::now();
             Time target_wakeup = Time::now();
             Time last_target_wake_up = Time::now();
             Time select_timeout_interval = Time::from_ms(CONST_SELECT_TIMEOUT_INTERVAL_MS);
+            struct timeval tv = select_timeout_interval.as_timeval();
+#else
+            SelectTimeoutContext to_context(CONST_SELECT_TIMEOUT_INTERVAL_MS, CONST_SELECT_TIMEOUT_EPSILON_MS);
+            struct timeval tv = to_context.current_timeout();
+#endif
             while (true) {
                 FD_ZERO(&set);
                 FD_SET(joy_fd, &set);
-                struct timeval tv = select_timeout_interval.as_timeval();
                 RBL_LOG_FMT("starting interval calc last_target_wake_up: %ld target_wake_up: %ld  now: %ld\n", last_target_wake_up.millisecs, target_wakeup.millisecs, tnow.millisecs);
                 RBL_LOG_FMT("\t target-last %ld target-now: %ld\n", target_wakeup.millisecs - last_target_wake_up.millisecs, target_wakeup.millisecs - tnow.millisecs);
                 RBL_LOG_FMT("select tv calc: tv secs: %ld tv u_secs: %ld\n", tv.tv_sec, tv.tv_usec);
+//                printf("tv %ld %ld  tv2 %ld %ld\n", tv.tv_sec, tv.tv_usec, tv2.tv_sec, tv2.tv_usec);
                 int select_out = select(joy_fd + 1, &set, nullptr, nullptr, &tv);
                 if (select_out == -1) {
                     // process error
@@ -173,10 +235,15 @@ namespace f710 {
                         printf("XXXXXXXXemit left: %d right: %d\n", saved_left_value, saved_right_value);
 //                    }
                     // compute the next timeout interval
+#ifdef TO_OLD
                     tnow = Time::now();
                     target_wakeup = tnow.add_ms(CONST_SELECT_TIMEOUT_INTERVAL_MS);
                     select_timeout_interval = Time::from_ms(CONST_SELECT_TIMEOUT_INTERVAL_MS);
                     last_target_wake_up = target_wakeup;
+                    tv = select_timeout_interval.as_timeval();
+#else
+                    tv = to_context.after_select_timedout();
+#endif
                 } else {
                     if (FD_ISSET(joy_fd, &set)) {
                         while (true) {
@@ -188,9 +255,10 @@ namespace f710 {
                             } else if (nread == -1) {
 //                                printf("eagain\n");
                                 // compute the select timeout interval
+#ifdef TO_OLD
                                 Time tnow = Time::now();
                                 Time tmp = last_target_wake_up.add_ms(100);
-                                if(Time::is_after(last_target_wake_up, tnow.add_ms(100))) {
+                                if(Time::is_after(last_target_wake_up, tnow.add_ms(CONST_SELECT_TIMEOUT_EPSILON_MS))) {
                                     // there is at least 100ms before the previously computed wakeup time
 
                                 } else if(Time::is_after(last_target_wake_up, tnow)) {
@@ -198,13 +266,17 @@ namespace f710 {
                                     // there is less than 100 ms between now and the last computed wakeup time
                                     // extend the wakeup time
 
-                                    last_target_wake_up = last_target_wake_up.add_ms(100);
+                                    last_target_wake_up = last_target_wake_up.add_ms(CONST_SELECT_TIMEOUT_EPSILON_MS);
                                 } else {
                                     // last computed wake up time is NOT after tnow. Set wakeup time to
                                     //tnow + 100ms
-                                    last_target_wake_up = tnow.add_ms(100);
+                                    last_target_wake_up = tnow.add_ms(CONST_SELECT_TIMEOUT_EPSILON_MS);
                                 }
                                 select_timeout_interval = Time::diff_ms(last_target_wake_up, tnow);
+                                tv = select_timeout_interval.as_timeval();
+#else
+                                tv = to_context.after_js_event();
+#endif
                                 break;
                             }
 #if 0
