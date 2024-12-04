@@ -15,5 +15,5 @@ add_executable(f710
         rbl/logger.cpp
         rbl/logger.h
 )
-target_include_directories(f710  PUBLIC ./)
+target_include_directories(f710  PUBLIC ./  ./src)
 #target_compile_definitions(f710 PUBLIC RBL_LOG_ENABLED RBL_LOG_ALLOW_GLOBAL)

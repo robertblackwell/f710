@@ -17,6 +17,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include "f710_time.h"
+#include "f710_exceptions.h"
 
 namespace f710 {
     class StreamDevice;

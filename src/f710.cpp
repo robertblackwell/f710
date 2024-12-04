@@ -58,6 +58,9 @@ namespace f710 {
          * This is the desired interval between select timeouts in millisecs
          */
         uint64_t desired_select_timeout_interval;
+        /**
+         * This is fudge factor.
+         */
         uint64_t epsilon_value;
         Time computed_next_timeout_value_ms;
         SelectTimeoutContext(uint64_t timeout_interval, uint64_t epsilon)
@@ -89,7 +92,9 @@ namespace f710 {
          * because of a js_event and subsequent to that we got an EAGAIN.
          *
          * Reading js_events takes time. The goal here is to not let the reading of events extend the
-         * period between select timeout expiries. So we try to calculate indirectly how much the next T/O
+         * period between select timeout expiries - at leats not "too much". Epsilon is the "too much"
+         * factor.
+         * So we try to calculate indirectly how much the next T/O
          * interval should be in order to get the T/O "back on schedule"
          */
         timeval after_js_event()
@@ -98,17 +103,17 @@ namespace f710 {
             tnow = Time::now();
             Time tmp = last_target_wake_up.add_ms(100);
             if(Time::is_after(last_target_wake_up, tnow.add_ms(epsilon_value))) {
-                // there is at least 100ms before the previously computed wakeup time
+                // there is at least epsilon ms before the previously computed wakeup time
 
             } else if(Time::is_after(last_target_wake_up, tnow)) {
                 // the last computed wake-up time is after tnow() but
-                // there is less than 100 ms between now and the last computed wakeup time
-                // extend the wake-up time
+                // there is less than epsilon ms between now and the last computed wakeup time
+                // extend the wake-up time by epsilon ms
 
                 last_target_wake_up = last_target_wake_up.add_ms(epsilon_value);
             } else {
                 // last computed wake-up time is NOT after tnow. Set wakeup time to
-                //tnow + 100ms
+                //tnow + epsilon ms - that is almost immediately.
                 last_target_wake_up = tnow.add_ms(epsilon_value);
             }
             computed_next_timeout_value_ms = Time::diff_ms(last_target_wake_up, tnow);
@@ -190,9 +195,7 @@ namespace f710 {
         int f710_fd;
         this->m_is_open = false;
         f710_fd = open_fd_non_blocking(m_joy_dev_name);
-        exit_guard::Guard guard([f710_fd]() {
-            close(f710_fd);
-        });
+        exit_guard::Guard guard([f710_fd]() {close(f710_fd);});
         SelectTimeoutContext to_context(CONST_SELECT_TIMEOUT_INTERVAL_MS, CONST_SELECT_TIMEOUT_EPSILON_MS);
         struct timeval tv = to_context.current_timeout();
         while (true) {
@@ -200,7 +203,7 @@ namespace f710 {
             FD_SET(f710_fd, &set);
             int select_out = select(f710_fd + 1, &set, nullptr, nullptr, &tv);
             if (select_out == -1) {
-                throw new std::runtime_error("error from select call");
+                throw F710SelectError();
             } else if (select_out == 0) {
                 auto left_value = -1 * this->left_stick_fwd_bkwd->get_latest_event().value;
                 auto right_value = -1 * this->right_stick_fwd_bkwd->get_latest_event().value;
@@ -226,7 +229,7 @@ namespace f710 {
             int nread = read(f710_fd, &event, sizeof(js_event));
             int save_errno = errno;
             if ((nread == 0) || ((nread == -1) && save_errno != EAGAIN)) {
-                throw std::runtime_error("io error reading events");
+                throw F710ReadIOError();
             } else if (nread == -1) {
                 return 0;
             }
