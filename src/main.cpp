@@ -2,7 +2,13 @@
 
 int main(int argc, char **argv)
 {
-    f710::F710 collector{"js0"};
-    int ix = collector.run();
+    try {
+        f710::F710 logitech_f710{"js0"};
+        logitech_f710.run([](int left, int right) {
+            printf("from main left: %d  right: %d\n", left, right);
+        });
+    } catch(...) {
+        printf("got an exception");
+    }
     return 0;
 }

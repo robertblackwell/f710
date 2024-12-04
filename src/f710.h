@@ -4,7 +4,7 @@
 #include <cstring>
 #include <string>
 #include <cinttypes>
-
+#include <functional>
 #include <dirent.h>
 #include <fcntl.h>
 #include <climits>
@@ -25,10 +25,10 @@ namespace f710 {
     public:
         F710(std::string device_path);
 
-        int run();
+        void run(std::function<void(int, int)> on_event_function);
 
     private:
-
+        int read_events(int fd, StreamDevice* left, StreamDevice* right);
         bool m_is_open;
 //        bool m_sticky_buttons;
 //        bool m_default_trig_value;

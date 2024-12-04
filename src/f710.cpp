@@ -6,7 +6,7 @@
 #include <cstring>
 #include <string>
 #include <cinttypes>
-
+#include <rbl/simple_exit_guard.h>
 #include <dirent.h>
 #include <fcntl.h>
 #include <climits>
@@ -20,7 +20,9 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <assert.h>
+#include <functional>
 #include <rbl/logger.h>
+
 
 // axis events
 #define AXIS_EVENT_CROSS_LEFT_RIGHT_EVENT_NUMBER 4
@@ -41,7 +43,7 @@
 #define BUTTON_EVENT_NUMBER_RB 5
 
 #define CONST_SELECT_TIMEOUT_INTERVAL_MS 500
-#define CONST_SELECT_TIMEOUT_EPSILON_MS 50
+#define CONST_SELECT_TIMEOUT_EPSILON_MS 5
 
 namespace f710 {
     /**
@@ -182,149 +184,81 @@ namespace f710 {
         right_stick_fwd_bkwd = new StreamDevice(AXIS_EVENT_RIGHT_STICK_FWD_BKWD_EVENT_NUMBER);
     }
 
-    int f710::F710::run() {
-        js_event event;
+    void f710::F710::run(std::function<void(int, int)> on_event_function)
+    {
         fd_set set;
-        int joy_fd;
-        // Big while loop opens, publishes
+        int f710_fd;
+        this->m_is_open = false;
+        f710_fd = open_fd_non_blocking(m_joy_dev_name);
+        exit_guard::Guard guard([f710_fd]() {
+            close(f710_fd);
+        });
+        SelectTimeoutContext to_context(CONST_SELECT_TIMEOUT_INTERVAL_MS, CONST_SELECT_TIMEOUT_EPSILON_MS);
+        struct timeval tv = to_context.current_timeout();
         while (true) {
-            this->m_is_open = false;
-            joy_fd = open_fd(m_joy_dev_name);
-            int status = fcntl(joy_fd, F_SETFL, fcntl(joy_fd, F_GETFL, 0) | O_NONBLOCK);
-            if (status == -1){
-                perror("calling fcntl");
-                return -1;
-            }
-
-            bool tv_set = false;
-            bool publication_pending = false;
-//            tv.tv_sec = 100;
-//            tv.tv_usec = 0;
-            double val;  // Temporary variable to hold event values
-#define XTO_OLD
-#ifdef TO_OLD
-            Time tnow = Time::now();
-            Time target_wakeup = Time::now();
-            Time last_target_wake_up = Time::now();
-            Time select_timeout_interval = Time::from_ms(CONST_SELECT_TIMEOUT_INTERVAL_MS);
-            struct timeval tv = select_timeout_interval.as_timeval();
-#else
-            SelectTimeoutContext to_context(CONST_SELECT_TIMEOUT_INTERVAL_MS, CONST_SELECT_TIMEOUT_EPSILON_MS);
-            struct timeval tv = to_context.current_timeout();
-#endif
-            while (true) {
-                FD_ZERO(&set);
-                FD_SET(joy_fd, &set);
-                RBL_LOG_FMT("starting interval calc last_target_wake_up: %ld target_wake_up: %ld  now: %ld\n", last_target_wake_up.millisecs, target_wakeup.millisecs, tnow.millisecs);
-                RBL_LOG_FMT("\t target-last %ld target-now: %ld\n", target_wakeup.millisecs - last_target_wake_up.millisecs, target_wakeup.millisecs - tnow.millisecs);
-                RBL_LOG_FMT("select tv calc: tv secs: %ld tv u_secs: %ld\n", tv.tv_sec, tv.tv_usec);
-//                printf("tv %ld %ld  tv2 %ld %ld\n", tv.tv_sec, tv.tv_usec, tv2.tv_sec, tv2.tv_usec);
-                int select_out = select(joy_fd + 1, &set, nullptr, nullptr, &tv);
-                if (select_out == -1) {
-                    // process error
-                } else if (select_out == 0) {
-                    RBL_LOG_FMT("select_out == 0 timeout\n");
-                    Time t = Time::now();
-                    js_event left_stick_event = this->left_stick_fwd_bkwd->get_latest_event();
-                    js_event right_stick_event = this->right_stick_fwd_bkwd->get_latest_event();
-                    int left_value = -left_stick_event.value;
-                    int right_value = -right_stick_event.value;
-//                    if((left_value != saved_left_value) || (right_value != saved_right_value)) {
-                        saved_left_value = left_value;
-                        saved_right_value = right_value;
-                        printf("XXXXXXXXemit left: %d right: %d\n", saved_left_value, saved_right_value);
-//                    }
-                    // compute the next timeout interval
-#ifdef TO_OLD
-                    tnow = Time::now();
-                    target_wakeup = tnow.add_ms(CONST_SELECT_TIMEOUT_INTERVAL_MS);
-                    select_timeout_interval = Time::from_ms(CONST_SELECT_TIMEOUT_INTERVAL_MS);
-                    last_target_wake_up = target_wakeup;
-                    tv = select_timeout_interval.as_timeval();
-#else
-                    tv = to_context.after_select_timedout();
-#endif
-                } else {
-                    if (FD_ISSET(joy_fd, &set)) {
-                        while (true) {
-                            int nread = read(joy_fd, &event, sizeof(js_event));
-                            int save_errno = errno;
-                            if ((nread == 0) || ((nread == -1) && save_errno != EAGAIN)) {
-                                // f710 probably closed itself
-                                return -1;
-                            } else if (nread == -1) {
-//                                printf("eagain\n");
-                                // compute the select timeout interval
-#ifdef TO_OLD
-                                Time tnow = Time::now();
-                                Time tmp = last_target_wake_up.add_ms(100);
-                                if(Time::is_after(last_target_wake_up, tnow.add_ms(CONST_SELECT_TIMEOUT_EPSILON_MS))) {
-                                    // there is at least 100ms before the previously computed wakeup time
-
-                                } else if(Time::is_after(last_target_wake_up, tnow)) {
-                                    // the last computed wake up time is after tnow() but
-                                    // there is less than 100 ms between now and the last computed wakeup time
-                                    // extend the wakeup time
-
-                                    last_target_wake_up = last_target_wake_up.add_ms(CONST_SELECT_TIMEOUT_EPSILON_MS);
-                                } else {
-                                    // last computed wake up time is NOT after tnow. Set wakeup time to
-                                    //tnow + 100ms
-                                    last_target_wake_up = tnow.add_ms(CONST_SELECT_TIMEOUT_EPSILON_MS);
-                                }
-                                select_timeout_interval = Time::diff_ms(last_target_wake_up, tnow);
-                                tv = select_timeout_interval.as_timeval();
-#else
-                                tv = to_context.after_js_event();
-#endif
-                                break;
-                            }
-#if 0
-                            if (read(joy_fd, &event, sizeof(js_event)) == -1 && errno != EAGAIN) {
-                                break;  // Joystick is probably closed. Definitely occurs.
-                            }
-#endif
-                            //                    printf("Button event type: %d value: %d number: %d\n", event.type, event.value, event.number);
-                            switch (event.type) {
-                                case JS_EVENT_BUTTON | JS_EVENT_INIT:
-                                    RBL_LOG_FMT("js_event_init \n");
-                                case JS_EVENT_BUTTON:
-                                    RBL_LOG_FMT("Button event  time: %d number: %d value: %d type: %d\n", event.time,
-                                           event.number, event.value, event.type);
-                                    break;
-                                case JS_EVENT_AXIS | JS_EVENT_INIT:
-                                    RBL_LOG_FMT("js_event_init \n");
-                                case JS_EVENT_AXIS: {
-#if 1
-                                    RBL_LOG_FMT("Axes time:%f event number: %d value: %d type: %d\n", event.time / 1000.0,
-                                           event.number, event.value, event.type);
-#endif
-                                    int ev_number = event.number;
-                                    if (ev_number == AXIS_EVENT_LEFT_STICK_FWD_BKWD_EVENT_NUMBER) {
-                                        this->left_stick_fwd_bkwd->add_js_event(event.time, event.value);
-                                    } else if (ev_number == AXIS_EVENT_RIGHT_STICK_FWD_BKWD_EVENT_NUMBER) {
-                                        this->right_stick_fwd_bkwd->add_js_event(event.time, event.value);
-                                    } else {
-                                        // ignore these events
-                                    }
-                                }
-                                    break;
-                                default:
-                                    RBL_LOG_FMT("joy_node: Unknown event type. Please file a ticket. "
-                                           "time=%u, value=%d, type=%Xh, number=%d", event.time, event.value,
-                                           event.type,
-                                           event.number);
-                                    break;
-                            }
-                        }
-                    }
+            FD_ZERO(&set);
+            FD_SET(f710_fd, &set);
+            int select_out = select(f710_fd + 1, &set, nullptr, nullptr, &tv);
+            if (select_out == -1) {
+                throw new std::runtime_error("error from select call");
+            } else if (select_out == 0) {
+                auto left_value = -1 * this->left_stick_fwd_bkwd->get_latest_event().value;
+                auto right_value = -1 * this->right_stick_fwd_bkwd->get_latest_event().value;
+                on_event_function(left_value, right_value);
+                tv = to_context.after_select_timedout();
+            } else {
+                if (FD_ISSET(f710_fd, &set)) {
+                    read_events(f710_fd, left_stick_fwd_bkwd, right_stick_fwd_bkwd);
+                    tv = to_context.after_js_event();
                 }
             }
-
-            close(joy_fd);
         }
-
-        cleanup:
-        printf("joy_node shut down.");
+        close(f710_fd);
+    }
+    /**
+     * Reads all events available on the f710_fd until an EAGAIN error in which case return 0
+     * If any other io type error return -1
+     */
+    int f710::F710::read_events(int f710_fd, StreamDevice* left, StreamDevice* right)
+    {
+        js_event event;
+        while (true) {
+            int nread = read(f710_fd, &event, sizeof(js_event));
+            int save_errno = errno;
+            if ((nread == 0) || ((nread == -1) && save_errno != EAGAIN)) {
+                throw std::runtime_error("io error reading events");
+            } else if (nread == -1) {
+                return 0;
+            }
+            switch (event.type) {
+                case JS_EVENT_BUTTON | JS_EVENT_INIT:
+                    RBL_LOG_FMT("js_event_init \n");
+                case JS_EVENT_BUTTON:
+                    RBL_LOG_FMT("Button event  time: %d number: %d value: %d type: %d\n", event.time,
+                                event.number, event.value, event.type);
+                    break;
+                case JS_EVENT_AXIS | JS_EVENT_INIT:
+                    RBL_LOG_FMT("js_event_init \n");
+                case JS_EVENT_AXIS: {
+                    RBL_LOG_FMT("Axes time:%f event number: %d value: %d type: %d\n", event.time / 1000.0,
+                                event.number, event.value, event.type);
+                    int ev_number = event.number;
+                    if (ev_number == left->event_id) {
+                        left->add_js_event(event.time, event.value);
+                    } else if (ev_number == right->event_id) {
+                        right->add_js_event(event.time, event.value);
+                    } else {
+                        // ignore these events
+                    }
+                }
+                    break;
+                default:
+                    RBL_LOG_FMT("joy_node: Unknown event type. Please file a ticket. "
+                                "time=%u, value=%d, type=%Xh, number=%d", event.time, event.value,
+                                event.type,
+                                event.number);
+                    break;
+            }
+        }
     }
 } // namespace f710

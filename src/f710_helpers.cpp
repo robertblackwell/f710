@@ -69,7 +69,7 @@ namespace f710 {
         closedir(dev_dir);
         return "";
     }
-    int open_fd(std::string device_name)
+    int open_fd_non_blocking(std::string device_name)
     {
         int f710_fd;
         std::string device_path = get_dev_by_joy_name(device_name);
@@ -87,7 +87,12 @@ namespace f710 {
                 f710_fd = open(device_path.c_str(), O_RDONLY);
             }
             if (f710_fd != -1) {
-
+                // make the f710_fd non-blocking
+                int status = fcntl(f710_fd, F_SETFL, fcntl(f710_fd, F_GETFL, 0) | O_NONBLOCK);
+                if (status == -1){
+                    perror("calling fcntl");
+                    return -1;
+                }
                 break;
             }
             if (first_fault) {
