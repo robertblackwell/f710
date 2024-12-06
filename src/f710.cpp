@@ -2,25 +2,15 @@
 // \author: Blaise Gassend
 #include "f710.h"
 #include "f710_helpers.h"
-#include <memory>
-#include <cstring>
 #include <string>
 #include <cinttypes>
 #include <rbl/simple_exit_guard.h>
-#include <dirent.h>
-#include <fcntl.h>
-#include <climits>
-#include <vector>
+#include <utility>
 #include <optional>
 #include <sys/time.h>
-#include <linux/input.h>
 #include <linux/joystick.h>
-#include <cmath>
 #include <sys/stat.h>
 #include <unistd.h>
-#include <fcntl.h>
-#include <assert.h>
-#include <functional>
 #include <rbl/logger.h>
 
 
@@ -64,14 +54,21 @@ namespace f710 {
         uint64_t epsilon_value;
         Time computed_next_timeout_value_ms;
         SelectTimeoutContext(uint64_t timeout_interval, uint64_t epsilon)
-        : desired_select_timeout_interval(timeout_interval), epsilon_value(epsilon)
+            : tnow(Time::now()),
+            target_wakeup(tnow.add_ms(timeout_interval)),
+            last_target_wake_up(target_wakeup),
+            desired_select_timeout_interval(timeout_interval),
+            epsilon_value(epsilon),
+            computed_next_timeout_value_ms(Time::from_ms(timeout_interval))
+
+
         {
             tnow = Time::now();
             computed_next_timeout_value_ms = tnow;
             target_wakeup = tnow;
             last_target_wake_up = tnow;
         }
-        timeval current_timeout()
+        [[nodiscard]] timeval current_timeout() const
         {
             return computed_next_timeout_value_ms.as_timeval();
         }
@@ -101,7 +98,6 @@ namespace f710 {
         {
             // compute the select timeout interval
             tnow = Time::now();
-            Time tmp = last_target_wake_up.add_ms(100);
             if(Time::is_after(last_target_wake_up, tnow.add_ms(epsilon_value))) {
                 // there is at least epsilon ms before the previously computed wakeup time
 
@@ -141,7 +137,7 @@ namespace f710 {
 
         StreamDevice() = default;
 
-        StreamDevice(int eventid)
+        explicit StreamDevice(int eventid)
                 : event_id(eventid)
         {
             is_new_event = false;
@@ -156,7 +152,6 @@ namespace f710 {
          */
         void add_js_event(uint32_t event_time, int16_t value)
         {
-            Time tnow = Time::now();
             if(!is_new_event) {
                 is_new_event = true;
             }
@@ -176,13 +171,13 @@ namespace f710 {
 
     };
 
-
     f710::F710::F710(std::string device_path)
-            : m_fd(-1), left_stick_fwd_bkwd(nullptr), right_stick_fwd_bkwd(nullptr),
-              saved_left_value(-1),
-              saved_right_value(-1)
+            : m_fd(-1), saved_left_value(-1),
+              saved_right_value(-1),
+              left_stick_fwd_bkwd(nullptr),
+              right_stick_fwd_bkwd(nullptr)
     {
-        m_joy_dev_name = device_path;
+        m_joy_dev_name = std::move(device_path);
         m_is_open = false;
         m_joy_dev = "";
         left_stick_fwd_bkwd = new StreamDevice(AXIS_EVENT_LEFT_STICK_FWD_BKWD_EVENT_NUMBER);
@@ -226,7 +221,7 @@ namespace f710 {
     {
         js_event event;
         while (true) {
-            int nread = read(f710_fd, &event, sizeof(js_event));
+            long nread = read(f710_fd, &event, sizeof(js_event));
             int save_errno = errno;
             if ((nread == 0) || ((nread == -1) && save_errno != EAGAIN)) {
                 throw F710ReadIOError();

@@ -20,11 +20,11 @@
 #include "f710_exceptions.h"
 
 namespace f710 {
-    class StreamDevice;
+    struct StreamDevice;
 
     class F710 {
     public:
-        F710(std::string device_path);
+        explicit F710(std::string device_path);
 
         void run(std::function<void(int, int)> on_event_function);
 

@@ -21,8 +21,8 @@ void rbl_log_function(const char* level, const char* funcname, const char* filen
 	}
 	pthread_mutex_lock(&lock);
 	// here put in locking for multi threaded applications
-	printf("%2d:%2d:%2d %s %s[%d] %s\n", timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec, level, funcname, line, message);
-//    printf("%2d:%2d:%2d %s %s %s[%d] %s\n", timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec, level, funcname, filename, line, message);
+//	printf("%2d:%2d:%2d %s %s[%d] %s\n", timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec, level, funcname, line, message);
+    printf("%2d:%2d:%2d %s %s %s[%d] %s\n", timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec, level, funcname, filename, line, message);
 	pthread_mutex_unlock(&lock);
 
 }
