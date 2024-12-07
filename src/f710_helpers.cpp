@@ -23,7 +23,7 @@ namespace f710 {
 /*! \brief Returns the device path of the first joystick that matches joy_name.
  *  If no match is found, an empty string is returned.
  */
-    std::string get_dev_by_joy_name(const std::string &joy_name) {
+    std::optional<std::string> get_dev_by_joy_name() {
         const char path[] = "/dev/input";  // no trailing / here
         struct dirent *entry;
         struct stat stat_buf;
@@ -67,12 +67,11 @@ namespace f710 {
             return current_path;
         }
         closedir(dev_dir);
-        return "";
+        return {};
     }
-    int open_fd_non_blocking(std::string device_name)
+    int open_fd_non_blocking(std::string device_path)
     {
         int f710_fd;
-        std::string device_path = get_dev_by_joy_name(device_name);
         bool first_fault = true;
         while (true) {
             f710_fd = open(device_path.c_str(), O_RDONLY);
@@ -96,7 +95,7 @@ namespace f710 {
                 break;
             }
             if (first_fault) {
-                printf("Couldn't open joystick %s. Will retry every second.", device_name.c_str());
+                printf("Couldn't open joystick %s. Will retry every second.", device_path.c_str());
                 first_fault = false;
             }
             sleep(1.0);
@@ -108,7 +107,7 @@ namespace f710 {
             strncpy(current_joy_name, "Unknown", sizeof(current_joy_name));
         }
 
-        printf("Opened joystick: %s (%s). ", device_path.c_str(), device_name.c_str());
+        printf("Opened joystick: %s (%s). ", device_path.c_str(), device_path.c_str());
         return f710_fd;
     }
 

@@ -1,8 +1,8 @@
-
-// \author: Blaise Gassend
 #include "f710.h"
 #include "f710_helpers.h"
 #include <string>
+#include <thread>
+#include <chrono>
 #include <cinttypes>
 #include <rbl/simple_exit_guard.h>
 #include <utility>
@@ -11,6 +11,8 @@
 #include <linux/joystick.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#define RBL_LOG_ENABLED
+#define RBL_LOG_ALLOW_GLOBAL
 #include <rbl/logger.h>
 
 
@@ -172,7 +174,7 @@ namespace f710 {
     };
 
     f710::F710::F710(std::string device_path)
-            : m_fd(-1), saved_left_value(-1),
+            : m_f710_fd(-1), saved_left_value(-1),
               saved_right_value(-1),
               left_stick_fwd_bkwd(nullptr),
               right_stick_fwd_bkwd(nullptr)
@@ -183,42 +185,67 @@ namespace f710 {
         left_stick_fwd_bkwd = new StreamDevice(AXIS_EVENT_LEFT_STICK_FWD_BKWD_EVENT_NUMBER);
         right_stick_fwd_bkwd = new StreamDevice(AXIS_EVENT_RIGHT_STICK_FWD_BKWD_EVENT_NUMBER);
     }
-
+    f710::F710::~F710()
+    {
+        if(m_f710_fd != -1) {
+            close(m_f710_fd);
+            m_f710_fd = -1;
+        }
+    }
     void f710::F710::run(std::function<void(int, int)> on_event_function)
     {
-        fd_set set;
-        int f710_fd;
-        this->m_is_open = false;
-        f710_fd = open_fd_non_blocking(m_joy_dev_name);
-        exit_guard::Guard guard([f710_fd]() {close(f710_fd);});
-        SelectTimeoutContext to_context(CONST_SELECT_TIMEOUT_INTERVAL_MS, CONST_SELECT_TIMEOUT_EPSILON_MS);
-        struct timeval tv = to_context.current_timeout();
         while (true) {
-            FD_ZERO(&set);
-            FD_SET(f710_fd, &set);
-            int select_out = select(f710_fd + 1, &set, nullptr, nullptr, &tv);
-            if (select_out == -1) {
-                throw F710SelectError();
-            } else if (select_out == 0) {
-                auto left_value = -1 * this->left_stick_fwd_bkwd->get_latest_event().value;
-                auto right_value = -1 * this->right_stick_fwd_bkwd->get_latest_event().value;
-                on_event_function(left_value, right_value);
-                tv = to_context.after_select_timedout();
-            } else {
-                if (FD_ISSET(f710_fd, &set)) {
-                    read_events(f710_fd, left_stick_fwd_bkwd, right_stick_fwd_bkwd);
-                    tv = to_context.after_js_event();
+            try {
+                RBL_LOG_FMT("trying to find a Logitech F710 device at /dev/input/jsN");
+                fd_set set;
+                m_f710_fd = -1;
+                auto fullpath = get_dev_by_joy_name();
+                if(!fullpath) {
+                    throw std::runtime_error("could not find path of the form /dev/imput/js");
                 }
+                m_f710_fd = open_fd_non_blocking(fullpath.value());
+                if(m_f710_fd == -1) {
+                    throw std::runtime_error(std::format("could not open the device path we found {}", fullpath.value()));
+                }
+                SelectTimeoutContext to_context(CONST_SELECT_TIMEOUT_INTERVAL_MS, CONST_SELECT_TIMEOUT_EPSILON_MS);
+                struct timeval tv = to_context.current_timeout();
+                while (true) {
+                    FD_ZERO(&set);
+                    FD_SET(m_f710_fd, &set);
+                    int select_out = select(m_f710_fd + 1, &set, nullptr, nullptr, &tv);
+                    if (select_out == -1) {
+                        throw F710SelectError();
+                    } else if (select_out == 0) {
+                        auto left_value = -1 * this->left_stick_fwd_bkwd->get_latest_event().value;
+                        auto right_value = -1 * this->right_stick_fwd_bkwd->get_latest_event().value;
+                        on_event_function(left_value, right_value);
+                        tv = to_context.after_select_timedout();
+                    } else {
+                        if (FD_ISSET(m_f710_fd, &set)) {
+                            read_events(m_f710_fd, left_stick_fwd_bkwd, right_stick_fwd_bkwd);
+                            tv = to_context.after_js_event();
+                        }
+                    }
+                }
+                close(m_f710_fd);
+                m_f710_fd = -1;
+            } catch (std::exception& e) {
+                RBL_LOG_FMT("f710 caught an exception what: %s\n", e.what());
+                if(m_f710_fd != -1) {
+                    close(m_f710_fd);
+                    m_f710_fd = -1;
+                }
+                using namespace std::chrono_literals;
+                std::this_thread::sleep_for(2000ms);
+                continue;
             }
         }
-        close(f710_fd);
     }
     /**
      * Reads all events available on the f710_fd until an EAGAIN error in which case return 0
      * If any other io type error return -1
      */
-    int f710::F710::read_events(int f710_fd, StreamDevice* left, StreamDevice* right)
-    {
+    int f710::F710::read_events(int f710_fd, StreamDevice *left, StreamDevice *right) {
         js_event event;
         while (true) {
             long nread = read(f710_fd, &event, sizeof(js_event));
@@ -230,16 +257,16 @@ namespace f710 {
             }
             switch (event.type) {
                 case JS_EVENT_BUTTON | JS_EVENT_INIT:
-                    RBL_LOG_FMT("js_event_init \n");
+//                    RBL_LOG_FMT("js_event_init \n");
                 case JS_EVENT_BUTTON:
-                    RBL_LOG_FMT("Button event  time: %d number: %d value: %d type: %d\n", event.time,
-                                event.number, event.value, event.type);
+//                    RBL_LOG_FMT("Button event  time: %d number: %d value: %d type: %d\n", event.time,
+//                                event.number, event.value, event.type);
                     break;
                 case JS_EVENT_AXIS | JS_EVENT_INIT:
-                    RBL_LOG_FMT("js_event_init \n");
+//                    RBL_LOG_FMT("js_event_init \n");
                 case JS_EVENT_AXIS: {
-                    RBL_LOG_FMT("Axes time:%f event number: %d value: %d type: %d\n", event.time / 1000.0,
-                                event.number, event.value, event.type);
+//                    RBL_LOG_FMT("Axes time:%f event number: %d value: %d type: %d\n", event.time / 1000.0,
+//                                event.number, event.value, event.type);
                     int ev_number = event.number;
                     if (ev_number == left->event_id) {
                         left->add_js_event(event.time, event.value);
@@ -251,12 +278,13 @@ namespace f710 {
                 }
                     break;
                 default:
-                    RBL_LOG_FMT("joy_node: Unknown event type. Please file a ticket. "
-                                "time=%u, value=%d, type=%Xh, number=%d", event.time, event.value,
-                                event.type,
-                                event.number);
+//                    RBL_LOG_FMT("joy_node: Unknown event type. Please file a ticket. "
+//                                "time=%u, value=%d, type=%Xh, number=%d", event.time, event.value,
+//                                event.type,
+//                                event.number);
                     break;
             }
         }
     }
+
 } // namespace f710

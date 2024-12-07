@@ -25,7 +25,7 @@ namespace f710 {
     class F710 {
     public:
         explicit F710(std::string device_path);
-
+        ~F710();
         void run(std::function<void(int, int)> on_event_function);
 
     private:
@@ -33,7 +33,7 @@ namespace f710 {
         bool m_is_open;
 //        bool m_sticky_buttons;
 //        bool m_default_trig_value;
-        int  m_fd;
+        int  m_f710_fd;
         std::string m_joy_dev;
         std::string m_joy_dev_name;
 //        double m_deadzone;

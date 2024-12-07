@@ -2,13 +2,17 @@
 #define H_f710_helpers_h
 #include <string>
 #include <stdexcept>
+#include <optional>
 
 namespace f710 {
 
-/*! \brief Returns the device path of the first joystick that matches joy_name.
- *  If no match is found, an empty string is returned.
+/** Tries to find a device whose path has the following string as a prefix "/dev/input/js"
+ *
+ *  If some are found chooses the first of those and returns the full path.
+ *
+ *  If no such path is found return {}
  */
-    std::string get_dev_by_joy_name(const std::string &joy_name);
+    std::optional<std::string> get_dev_by_joy_name();
     int open_fd_non_blocking(std::string device_name);
 
 //    class F710Exception: public std::exception
