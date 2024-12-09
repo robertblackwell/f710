@@ -11,6 +11,7 @@
 #include <linux/joystick.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <bridge_lib/std_format.h>
 #define RBL_LOG_ENABLED
 #define RBL_LOG_ALLOW_GLOBAL
 #include <rbl/logger.h>
@@ -146,7 +147,12 @@ namespace f710 {
             latest_event_time = 0;
             latest_event_value = 0;
         }
-
+        void reset()
+        {
+            is_new_event = false;
+            latest_event_time = 0;
+            latest_event_value = 0;
+        }
         /**
          * Records the most recent event
          * @param event_time  The time value in the most recent event
@@ -205,8 +211,10 @@ namespace f710 {
                 }
                 m_f710_fd = open_fd_non_blocking(fullpath.value());
                 if(m_f710_fd == -1) {
-                    throw std::runtime_error(std::format("could not open the device path we found {}", fullpath.value()));
+                    throw std::runtime_error(std_format("could not open the device path we found %s", fullpath.value().c_str()));
                 }
+                // this->left_stick_fwd_bkwd->reset();
+                // this->right_stick_fwd_bkwd->reset();
                 SelectTimeoutContext to_context(CONST_SELECT_TIMEOUT_INTERVAL_MS, CONST_SELECT_TIMEOUT_EPSILON_MS);
                 struct timeval tv = to_context.current_timeout();
                 while (true) {
@@ -218,6 +226,7 @@ namespace f710 {
                     } else if (select_out == 0) {
                         auto left_value = -1 * this->left_stick_fwd_bkwd->get_latest_event().value;
                         auto right_value = -1 * this->right_stick_fwd_bkwd->get_latest_event().value;
+                        printf("left_value: %d right_value: %d\n", left_value, right_value);
                         on_event_function(left_value, right_value);
                         tv = to_context.after_select_timedout();
                     } else {
@@ -262,11 +271,17 @@ namespace f710 {
 //                    RBL_LOG_FMT("Button event  time: %d number: %d value: %d type: %d\n", event.time,
 //                                event.number, event.value, event.type);
                     break;
-                case JS_EVENT_AXIS | JS_EVENT_INIT:
-//                    RBL_LOG_FMT("js_event_init \n");
-                case JS_EVENT_AXIS: {
-//                    RBL_LOG_FMT("Axes time:%f event number: %d value: %d type: %d\n", event.time / 1000.0,
-//                                event.number, event.value, event.type);
+                case JS_EVENT_AXIS | JS_EVENT_INIT:{
+                    if (event.number == left->event_id) {
+                        left->add_js_event(event.time, 0);
+                    } else if (event.number == right->event_id) {
+                        right->add_js_event(event.time, 0);
+                    } else {
+                        // ignore these events
+                    }
+                    break;
+                }
+                case JS_EVENT_AXIS:{ 
                     int ev_number = event.number;
                     if (ev_number == left->event_id) {
                         left->add_js_event(event.time, event.value);
@@ -275,8 +290,8 @@ namespace f710 {
                     } else {
                         // ignore these events
                     }
-                }
                     break;
+                }
                 default:
 //                    RBL_LOG_FMT("joy_node: Unknown event type. Please file a ticket. "
 //                                "time=%u, value=%d, type=%Xh, number=%d", event.time, event.value,

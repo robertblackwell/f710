@@ -29,6 +29,7 @@ namespace f710 {
         void run(std::function<void(int, int)> on_event_function);
 
     private:
+        void reset();
         int read_events(int fd, StreamDevice* left, StreamDevice* right);
         bool m_is_open;
 //        bool m_sticky_buttons;

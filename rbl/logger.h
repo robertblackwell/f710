@@ -17,23 +17,23 @@ extern "C" {
 #if defined(RBL_LOG_ENABLED) && defined(RBL_LOG_ALLOW_GLOBAL)
 #define RBL_LOG_ERROR(f_, ...) do {\
 		char* s; \
-		int c  = asprintf(&s, f_, ##__VA_ARGS__); \
+		asprintf(&s, f_, ##__VA_ARGS__); \
 		rbl_log_function("ERR", __FUNCTION__, __FILE__, __LINE__, s); \
 		free(s); \
 	} while(0);
 
-#define RBL_LOG_FMT(f_, ...) do {\
-		char* s; \
-		int c  = asprintf(&s, f_, ##__VA_ARGS__); \
-		rbl_log_function("LOG", __FUNCTION__, __FILE__, __LINE__, s); \
-		free(s); \
-	} while(0);
-
+/* #define RBL_LOG_FMT(f_, ...) do {\
+// 		char* s; \
+// 		asprintf(&s, f_, ##__VA_ARGS__); \
+// 		rbl_log_function("LOG", __FUNCTION__, __FILE__, __LINE__, s); \
+// 		free(s); \
+// 	} while(0);
+*/
 
 	#define RBL_LOG_PRINTF(f_, ...) printf((f_), ##__VA_ARGS__)
 	#define RBL_LOG_FMT(f_, ...) do {\
 		char* s; \
-		int c  = asprintf(&s, f_, ##__VA_ARGS__); \
+		asprintf(&s, f_, ##__VA_ARGS__); \
 		rbl_log_function("LOG", __FUNCTION__, __FILE__, __LINE__, s); \
 		free(s); \
 	} while(0);
