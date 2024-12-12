@@ -11,7 +11,7 @@
 #include <linux/joystick.h>
 #include <sys/stat.h>
 #include <unistd.h>
-#include <bridge_lib/std_format.h>
+#include <rbl/std_format.h>
 #define RBL_LOG_ENABLED
 #define RBL_LOG_ALLOW_GLOBAL
 #include <rbl/logger.h>

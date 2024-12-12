@@ -6,7 +6,7 @@ project(f710
 )
 set(CMAKE_BUILD_TYPE Debug)
 add_executable(f710
-        src/main.cpp
+        ../f710_demo/main.cpp
         src/f710_time.h
         src/f710.h
         src/f710.cpp
