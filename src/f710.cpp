@@ -226,7 +226,7 @@ namespace f710 {
                     } else if (select_out == 0) {
                         auto left_value = -1 * this->left_stick_fwd_bkwd->get_latest_event().value;
                         auto right_value = -1 * this->right_stick_fwd_bkwd->get_latest_event().value;
-                        printf("left_value: %d right_value: %d\n", left_value, right_value);
+//                        printf("left_value: %d right_value: %d\n", left_value, right_value);
                         on_event_function(left_value, right_value);
                         tv = to_context.after_select_timedout();
                     } else {

@@ -10,6 +10,11 @@
 
 
 template<typename T>
+//    requires (
+//            !std::is_copy_assignable_v<T>
+//            && !std::is_copy_constructible_v<T>
+//            && std::is_move_assignable_v<T> && std::is_move_constructible_v<T>)
+
 class ConditionVariableQueue {
     std::queue<T> m_queue;
     std::mutex m_queue_mutex;
@@ -47,34 +52,27 @@ public:
     void cleanup() {
 
     }
-
-    void put(T item) {
+    template<typename U = T> requires (std::is_move_constructible_v<U> && std::is_move_assignable_v<U>)
+    void put(U item)
+    {
         {
             std::lock_guard<std::mutex> lock{m_queue_mutex};
             m_queue.push(std::move(item));
             m_queue_cond_var.notify_one();
         }
     }
-    void emplace(T item)
-    {
-        {
-            std::lock_guard<std::mutex> lock{m_queue_mutex};
-            m_queue.emplace(item);
-            m_queue_cond_var.notify_one();
-        }
-    }
-
+    template<typename U = T> requires (std::is_move_constructible_v<U> && std::is_move_assignable_v<U>)
     T get_wait() {
-        T ldata_sptr;
+        T item;
         {
             std::unique_lock<std::mutex> lock{m_queue_mutex};
             m_queue_cond_var.wait(lock, [this]() {
                 return ((!m_queue.empty()) && (m_queue.size() > 0)) || (m_stop_flag);
             });
-            ldata_sptr = std::move(m_queue.front());
+            item = std::move(m_queue.front());
             m_queue.pop();
         }
-        return ldata_sptr;
+        return item;
     }
 
     std::size_t length() {
