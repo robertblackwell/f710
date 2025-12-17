@@ -14,6 +14,10 @@ namespace f710 {
         }
     };
 
+    class F710WrongModeError: public F710Exception {
+    public:
+        F710WrongModeError() : F710Exception("it looks like your controller is in Xmode") {}
+    };
     class F710SelectError: public F710Exception {
     public:
         F710SelectError() : F710Exception("io error during select call") {}

@@ -10,6 +10,7 @@
 #include <climits>
 #include <vector>
 #include <optional>
+#include <assert.h>
 #include <sys/time.h>
 #include <linux/input.h>
 #include <linux/joystick.h>
@@ -20,31 +21,152 @@
 #include "f710_exceptions.h"
 
 namespace f710 {
-    class StreamDevice;
+    class AxisDevice;
+    /**
+ * This class represents one of the axis of one of the sticks on a F710
+ *
+ * The significant characteristic is that such a device sends a stream of events
+ * as a stick is moved along one of its axes.
+ *
+ * Problem: the stream is very fast. That is interval between adjacent values
+ * if too fast for each event to be sent to a robot.
+ *
+ * The purpose of this class is to process that stream into a slower stream
+ * of values/events.
+ */
+    struct AxisDevice {
+        uint32_t latest_event_time;
+        int16_t  latest_event_value;
+        bool     is_new_event;
+        int event_id;
 
+        AxisDevice() = default;
+
+        AxisDevice(int eventid)
+                : event_id(eventid)
+        {
+            is_new_event = false;
+            latest_event_time = 0;
+            latest_event_value = 0;
+        }
+
+        /**
+         * Records the most recent event
+         * @param event_time  The time value in the most recent event
+         * @param value       The stick position in the most recent event
+         */
+        void add_js_event(uint32_t event_time, int16_t value)
+        {
+            Time tnow = Time::now();
+            if(!is_new_event) {
+                is_new_event = true;
+            }
+            latest_event_time = event_time;
+            latest_event_value = value;
+        }
+        /**
+         *  Returns {} if there is not a new event since the last call to this function
+         *  Returns the event if there has been one or more new events since the last call
+         */
+        js_event get_latest_event()
+        {
+            is_new_event = false;
+            js_event ev = {.time=latest_event_time, .value=latest_event_value, .type=JS_EVENT_AXIS, .number=(__u8) event_id};
+            return ev;
+        }
+
+    };
+
+    struct ToggleButton {
+        int event_number;
+        __u8 event_type;
+        int event_value;
+        int event_state;
+        uint32_t latest_event_time;
+        bool event_toggle_value;
+        #define EVENT_STATE_A 11 //act on a 1 ignore a 0
+        #define EVENT_STATE_B 22 //ignore a 1 act on a 0
+
+        ToggleButton(int button_event) {
+            event_number = button_event;
+            event_type = JS_EVENT_BUTTON;
+            event_state = EVENT_STATE_A;
+            event_toggle_value = false;
+            latest_event_time = 0;
+        }
+        void apply_event(js_event event)
+        {
+            if((event.type != JS_EVENT_BUTTON) || (event.number != event_number))
+                return;
+            latest_event_time = event.time;
+            event_value = event.value;
+            switch(event_state) {
+                case EVENT_STATE_A:
+                    if(event.value == 1) {
+                        event_state = EVENT_STATE_B;
+                        event_toggle_value = !event_toggle_value;
+                    }
+                    break;
+                case EVENT_STATE_B:
+                    if(event.value == 0) {
+                        event_state = EVENT_STATE_A;
+                    }
+                    break;
+                default:
+                    assert(0);
+            }
+
+        }
+        void apply_init_event(js_event event)
+        {
+            apply_event(event);
+        }
+        js_event get_latest_event()
+        {
+            js_event ev = {.time=latest_event_time, .value=(__s16)((event_toggle_value)?1:0), .type=event_type, .number=(__u8) event_number};
+            return ev;
+        }
+
+    };
+    struct ControllerState {
+        AxisDevice  m_left;
+        AxisDevice  m_right;
+        ToggleButton m_button;
+        ControllerState(AxisDevice left, AxisDevice right, ToggleButton button)
+            : m_left(left), m_right(right), m_button(button)
+        {
+
+        }
+        void apply_event(js_event event)
+        {
+            m_left.add_js_event(event.time, event.value);
+            m_right.add_js_event(event.time, event.value);
+            m_button.apply_event(event);
+        }
+        void apply_init_event(js_event event)
+        {
+            m_left.add_js_event(event.time, event.value);
+            m_right.add_js_event(event.time, event.value);
+            m_button.apply_event(event);
+        }
+    };
     class F710 {
     public:
         F710(std::string device_path);
 
-        void run(std::function<void(int, int)> on_event_function);
+        void run(std::function<void(int, int, bool)> on_event_function);
 
     private:
-        int read_events(int fd, StreamDevice* left, StreamDevice* right);
+        int read_init_events(int fd, ControllerState* cstate);
+        int read_events(int fd, ControllerState* cstate);
         bool m_is_open;
-//        bool m_sticky_buttons;
-//        bool m_default_trig_value;
         int  m_fd;
+        int  m_button_count;
+        int  m_axis_count;
+        bool m_initialize_done;
         std::string m_joy_dev;
         std::string m_joy_dev_name;
-//        double m_deadzone;
-//        double m_autorepeat_rate;    // in Hz.  0 for no repeat.
-//        double m_coalesce_interval;  // Defaults to 100 Hz rate limit.
-//        int m_event_count;
-//        int m_pub_count;
-        int          saved_left_value;
-        int          saved_right_value;
-        StreamDevice *left_stick_fwd_bkwd;
-        StreamDevice *right_stick_fwd_bkwd;
+        ControllerState* m_controller_state;
     };
 }
 #endif

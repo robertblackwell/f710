@@ -23,24 +23,116 @@
 #include <functional>
 #include <rbl/logger.h>
 
-
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+/// The following constants are applicable to Direct Mode - when the toggle on the front of the
+/// controller points at the 'D'.
+/// In this mode there are 3 AXIS input providers and 12 buttons.
+//////////////////////////////////////////////////////////////////////////////////////////////////////
 // axis events
-#define AXIS_EVENT_CROSS_LEFT_RIGHT_EVENT_NUMBER 4
-#define AXIS_EVENT_CROSS_FWD_BKWD_EVENT_NUMBER 5
+#define D_AXIS_CROSS_LEFT_RIGHT_NUMBER 4
+#define D_AXIS_CROSS_FWD_BKWD_NUMBER 5
 
-#define AXIS_EVENT_RIGHT_STICK_LEFT_RIGHT_EVENT_NUMBER 2
-#define AXIS_EVENT_RIGHT_STICK_FWD_BKWD_EVENT_NUMBER 3
-#define AXIS_EVENT_LEFT_STICK_LEFT_RIGHT_EVENT_NUMBER 0
-#define AXIS_EVENT_LEFT_STICK_FWD_BKWD_EVENT_NUMBER 1
+#define D_AXIS_RIGHT_STICK_LEFT_RIGHT_NUMBER 2
+#define D_AXIS_RIGHT_STICK_FWD_BKWD_NUMBER 3
+#define D_AXIS_LEFT_STICK_LEFT_RIGHT_NUMBER 0
+#define D_AXIS_LEFT_STICK_FWD_BKWD_NUMBER 1
 // button events
-#define BUTTON_EVENT_NUMBER_Y 3
-#define BUTTON_EVENT_NUMBER_B 2
-#define BUTTON_EVENT_NUMBER_A 1
-#define BUTTON_EVENT_NUMBER_X 0
-#define BUTTON_EVENT_NUMBER_LT 6
-#define BUTTON_EVENT_NUMBER_LB 4
-#define BUTTON_EVENT_NUMBER_RT 7
-#define BUTTON_EVENT_NUMBER_RB 5
+/// Button events only have 0 or 1 for values and the value reverts to 0
+/// as soon as the button is released. If you want to use a button as an on-off
+/// awitch you have to remember when it goes to 1
+///
+///
+/// Buttons in the circle on the left front of the coroller
+///
+#define D_BUTTON_X  0
+#define D_BUTTON_A  1
+#define D_BUTTON_B  2
+#define D_BUTTON_Y  3
+///
+/// Buttons on the RIGHT front/leading face of the controller.
+/// They are labelled LB and LT. Notice the labels are upside down
+/// and the one labelled LB is actually on the top while LT is on
+/// the bottom when holding the controller in the "useing" position.
+///
+#define D_BUTTON_LB 4
+#define D_BUTTON_LT 6
+///
+/// Buttons on the RIGHT front/leading face of the controller.
+/// They are labelled RB and RT. Notice the labels are upside down
+/// and the one labelled RB is actually on the top while RT is on
+/// the bottom when holding the controller in the "useing" position
+///
+#define D_BUTTON_RB 5
+#define D_BUTTON_RT 7
+
+#define D_BUTTON_BACK 8
+#define D_BUTTON__START 9
+///
+/// The left and right sticks have a push button function as given below
+///
+#define D_BUTTON_LEFT_STICK_PUSH 10
+#define D_BUTTON_RIGHT_STICK_PUSH_11
+////////////////////////////////////////////////////////////////////////////////////////////////////////
+/// When the button on the front of the conttroller is in the X position the controller and driver
+/// will operate in X mode.
+/// In this mode there are 8 axis controls -
+/// -   left stick FWD-BWD, left stick LEFT-RIGHT, right stick FWD-BWD, right stick LEFT-RIGHT
+/// -   cross LEFT-RIGHT, cros FWD-BCKWD
+/// -   LT hold down (negative values only) RT hold down (negative values only)
+/// and 10 buttons, they are:
+/// -   A,B,X,Y, START, BACK, LB, RB, left stick PUSH, right stick PUSH
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+// axis events
+
+#define X_AXIS_LEFT_STICK_LEFT_RIGHT_NUMBER 0
+#define X_AXIS_LEFT_STICK_FWD_BKWD_NUMBER 1
+
+#define X_AXIS_RIGHT_STICK_LEFT_RIGHT_NUMBER 3
+#define X_AXIS_RIGHT_STICK_FWD_BKWD_NUMBER 4
+
+#define X_AXIS_CROSS_LEFT_RIGHT_NUMBER 6
+#define X_AXIS_CROSS_FWD_BKWD_NUMBER 7
+
+#define X_AXIS_LT 4
+#define X_AXIS_RT 5
+
+
+// button events
+/// Button events only have 0 or 1 for values and the value reverts to 0
+/// as soon as the button is released. If you want to use a button as an on-off
+/// awitch you have to remember when it goes to 1
+///
+///
+/// Buttons in the circle on the left front of the coroller
+///
+#define X_BUTTON_X  2
+#define X_BUTTON_A  0
+#define X_BUTTON_B  1
+#define X_BUTTON_Y  3
+///
+/// Buttons on the RIGHT front/leading face of the controller.
+/// They are labelled LB and LT. Notice the labels are upside down
+/// and the one labelled LB is actually on the top while LT is on
+/// the bottom when holding the controller in the "useing" position.
+///
+#define X_BUTTON_LB 4
+///
+/// Buttons on the RIGHT front/leading face of the controller.
+/// They are labelled RB and RT. Notice the labels are upside down
+/// and the one labelled RB is actually on the top while RT is on
+/// the bottom when holding the controller in the "useing" position
+///
+#define X_BUTTON_RB 5
+
+#define X_BUTTON_BACK 6
+#define X_BUTTON_START 7
+///
+/// The left and right sticks have a push button function as given below
+///
+#define X_BUTTON_LEFT_STICK_PUSH  9
+#define X_BUTTON_RIGHT_STICK_PUSH 10
+
+
 
 #define CONST_SELECT_TIMEOUT_INTERVAL_MS 500
 #define CONST_SELECT_TIMEOUT_EPSILON_MS 5
@@ -120,7 +212,7 @@ namespace f710 {
             return computed_next_timeout_value_ms.as_timeval();
         }
     };
-
+#if 0
 /**
  * This class represents one of the axis of one of the sticks on a F710
  *
@@ -133,15 +225,15 @@ namespace f710 {
  * The purpose of this class is to process that stream into a slower stream
  * of values/events.
  */
-    struct StreamDevice {
+    struct AxisDevice {
         uint32_t latest_event_time;
         int16_t  latest_event_value;
         bool     is_new_event;
         int event_id;
 
-        StreamDevice() = default;
+        AxisDevice() = default;
 
-        StreamDevice(int eventid)
+        AxisDevice(int eventid)
                 : event_id(eventid)
         {
             is_new_event = false;
@@ -164,7 +256,7 @@ namespace f710 {
             latest_event_value = value;
         }
         /**
-         *  Returns {} if there is not a new event sicne the last call to this function
+         *  Returns {} if there is not a new event since the last call to this function
          *  Returns the event if there has been one or more new events since the last call
          */
         js_event get_latest_event()
@@ -175,21 +267,45 @@ namespace f710 {
         }
 
     };
-
-
+    struct ControllerState {
+        AxisDevice  m_left;
+        AxisDevice  m_right;
+        void apply_event(js_event event)
+        {
+            int ev_number = event.number;
+            if (ev_number == m_left.event_id) {
+                m_left.add_js_event(event.time, event.value);
+            } else if (ev_number == m_right.event_id) {
+                m_right.add_js_event(event.time, event.value);
+            } else {
+                // ignore these events
+            }
+        }
+        void apply_init_event(js_event event)
+        {
+            int ev_number = event.number;
+            if (ev_number == m_left.event_id) {
+                m_left.add_js_event(event.time, event.value);
+            } else if (ev_number == m_right.event_id) {
+                m_right.add_js_event(event.time, event.value);
+            } else {
+                // ignore these events
+            }
+        }
+    };
+#endif
     f710::F710::F710(std::string device_path)
-            : m_fd(-1), left_stick_fwd_bkwd(nullptr), right_stick_fwd_bkwd(nullptr),
-              saved_left_value(-1),
-              saved_right_value(-1)
+            : m_fd(-1), m_controller_state(nullptr), m_axis_count(0), m_button_count(0),m_initialize_done(false)
     {
         m_joy_dev_name = device_path;
         m_is_open = false;
         m_joy_dev = "";
-        left_stick_fwd_bkwd = new StreamDevice(AXIS_EVENT_LEFT_STICK_FWD_BKWD_EVENT_NUMBER);
-        right_stick_fwd_bkwd = new StreamDevice(AXIS_EVENT_RIGHT_STICK_FWD_BKWD_EVENT_NUMBER);
+        m_controller_state = new ControllerState(
+                AxisDevice(D_AXIS_LEFT_STICK_FWD_BKWD_NUMBER),
+                AxisDevice(D_AXIS_RIGHT_STICK_FWD_BKWD_NUMBER), ToggleButton(D_BUTTON_A));
     }
 
-    void f710::F710::run(std::function<void(int, int)> on_event_function)
+    void f710::F710::run(std::function<void(int, int, bool)> on_event_function)
     {
         fd_set set;
         int f710_fd;
@@ -205,24 +321,25 @@ namespace f710 {
             if (select_out == -1) {
                 throw F710SelectError();
             } else if (select_out == 0) {
-                auto left_value = -1 * this->left_stick_fwd_bkwd->get_latest_event().value;
-                auto right_value = -1 * this->right_stick_fwd_bkwd->get_latest_event().value;
-                on_event_function(left_value, right_value);
+                auto left_value = -1 * this->m_controller_state->m_left.get_latest_event().value;
+                auto right_value = -1 * this->m_controller_state->m_left.get_latest_event().value;
+                auto toggle = (1 == this->m_controller_state->m_button.get_latest_event().value);
+                on_event_function(left_value, right_value, toggle);
                 tv = to_context.after_select_timedout();
             } else {
                 if (FD_ISSET(f710_fd, &set)) {
-                    read_events(f710_fd, left_stick_fwd_bkwd, right_stick_fwd_bkwd);
+                    if(!m_initialize_done) {
+                        read_init_events(f710_fd, m_controller_state);
+                    } else {
+                        read_events(f710_fd, m_controller_state);
+                    }
                     tv = to_context.after_js_event();
                 }
             }
         }
         close(f710_fd);
     }
-    /**
-     * Reads all events available on the f710_fd until an EAGAIN error in which case return 0
-     * If any other io type error return -1
-     */
-    int f710::F710::read_events(int f710_fd, StreamDevice* left, StreamDevice* right)
+    int f710::F710::read_init_events(int f710_fd, ControllerState* cstate)
     {
         js_event event;
         while (true) {
@@ -234,33 +351,74 @@ namespace f710 {
                 return 0;
             }
             switch (event.type) {
-                case JS_EVENT_BUTTON | JS_EVENT_INIT:
-                    RBL_LOG_FMT("js_event_init \n");
-                case JS_EVENT_BUTTON:
-                    RBL_LOG_FMT("Button event  time: %d number: %d value: %d type: %d\n", event.time,
+                case JS_EVENT_INIT | JS_EVENT_BUTTON:
+                    RBL_LOG_FMT("js_event_init_button time: %d number: %d value: %d type: %Xh",
+                                event.time,
+                                event.number, event.value, event.type);
+
+                    cstate->apply_init_event(event);
+                    m_button_count++;
+                    break;
+                case JS_EVENT_AXIS | JS_EVENT_INIT: {
+                    RBL_LOG_FMT("js_event_init_axis time:%f event number: %d value: %d type: %d",
+                                event.time / 1000.0,
+                                event.number, event.value, event.type);
+                    cstate->apply_init_event(event);
+                    m_axis_count++;
+                }
+                    break;
+                default:
+                    throw F710WrongModeError();
+
+            }
+            RBL_LOG_FMT("initializing %d %d %d", ((int)m_initialize_done), m_button_count, m_axis_count)
+            m_initialize_done = (m_button_count == 12)&&(m_axis_count == 6) ;
+        }
+    }
+    /**
+     * Reads all events available on the f710_fd until an EAGAIN error in which case return 0
+     * If any other io type error return -1
+     */
+    int f710::F710::read_events(int f710_fd, ControllerState* cstate)
+    {
+        js_event event;
+        assert(m_initialize_done);
+        while (true) {
+            int nread = read(f710_fd, &event, sizeof(js_event));
+            int save_errno = errno;
+            if ((nread == 0) || ((nread == -1) && save_errno != EAGAIN)) {
+                throw F710ReadIOError();
+            } else if (nread == -1) {
+                return 0;
+            }
+            switch (event.type) {
+                case  JS_EVENT_INIT | JS_EVENT_BUTTON:
+                    RBL_LOG_FMT("js_event_init_button time: %d number: %d value: %d type: %Xh",
+                                event.time,
                                 event.number, event.value, event.type);
                     break;
                 case JS_EVENT_AXIS | JS_EVENT_INIT:
-                    RBL_LOG_FMT("js_event_init \n");
-                case JS_EVENT_AXIS: {
-                    RBL_LOG_FMT("Axes time:%f event number: %d value: %d type: %d\n", event.time / 1000.0,
+                    RBL_LOG_FMT("js_event_init_axis time:%f event number: %d value: %d type: %d",
+                                event.time / 1000.0,
                                 event.number, event.value, event.type);
-                    int ev_number = event.number;
-                    if (ev_number == left->event_id) {
-                        left->add_js_event(event.time, event.value);
-                    } else if (ev_number == right->event_id) {
-                        right->add_js_event(event.time, event.value);
-                    } else {
-                        // ignore these events
-                    }
-                }
                     break;
+                case JS_EVENT_BUTTON:
+                    RBL_LOG_FMT("Button event  time: %d number: %d value: %d type: %d", event.time,
+                                event.number, event.value, event.type);
+                    cstate->apply_event(event);
+                break;
+                case JS_EVENT_AXIS: {
+                    RBL_LOG_FMT("Axes time:%f event number: %d value: %d type: %d", event.time / 1000.0,
+                                event.number, event.value, event.type);
+                    cstate->apply_event(event);
+                }
+                break;
                 default:
                     RBL_LOG_FMT("joy_node: Unknown event type. Please file a ticket. "
                                 "time=%u, value=%d, type=%Xh, number=%d", event.time, event.value,
                                 event.type,
                                 event.number);
-                    break;
+                break;
             }
         }
     }
