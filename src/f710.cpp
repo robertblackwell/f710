@@ -22,6 +22,24 @@
 #include <assert.h>
 #include <functional>
 #include <rbl/logger.h>
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+/// The following constants are applicable to Direct Mode - when the toggle on the front of the
+/// controller points at the 'D'.
+/// In this mode there are 3 AXIS input providers and 12 buttons.
+///
+/// #define values for event types are in <linux/joystick.h>
+///
+/// Events are identified by the pair (event_type, event_number)
+///
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+enum class DModeAxisEventNumber {
+    RIGHT_STICK_LEFT_RIGHT = 2,
+    RIGHT_STICK_FWD_BKWD = 3,
+    LEFT_STICK_LEFT_RIGHT = 0,
+    LEFT_STICK_FWD_BKWD = 1,
+    CROSS_LEFT_RIGHT = 4,
+    CROSS_FWD_BKWD = 5,
+};
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////
 /// The following constants are applicable to Direct Mode - when the toggle on the front of the
@@ -36,6 +54,43 @@
 #define D_AXIS_RIGHT_STICK_FWD_BKWD_NUMBER 3
 #define D_AXIS_LEFT_STICK_LEFT_RIGHT_NUMBER 0
 #define D_AXIS_LEFT_STICK_FWD_BKWD_NUMBER 1
+enum class DModeButtonEventNumber {
+    /// Button events only have 0 or 1 for values and the value reverts to 0
+    /// as soon as the button is released. If you want to use a button as an on-off
+    /// awitch you have to remember when it goes to 1
+    ///
+    ///
+    /// Buttons in the circle on the left front of the coroller
+    ///
+    X = 0,
+    A = 1,
+    B = 2,
+    Y = 3,
+    ///
+    /// Buttons on the RIGHT front/leading face of the controller.
+    /// They are labelled LB and LT. Notice the labels are upside down
+    /// and the one labelled LB is actually on the top while LT is on
+    /// the bottom when holding the controller in the "useing" position.
+    ///
+    LB = 4,
+    LT = 6,
+    ///
+    /// Buttons on the RIGHT front/leading face of the controller.
+    /// They are labelled RB and RT. Notice the labels are upside down
+    /// and the one labelled RB is actually on the top while RT is on
+    /// the bottom when holding the controller in the "useing" position
+    ///
+    RB = 5,
+    RT = 7,
+
+    BACK = 8,
+    START = 9,
+    ///
+    /// The left and right sticks have a push button function as given below
+    ///
+    LEFT_STICK_PUSH = 10,
+    RIGHT_STICK_PUSH = 11,
+};
 // button events
 /// Button events only have 0 or 1 for values and the value reverts to 0
 /// as soon as the button is released. If you want to use a button as an on-off
@@ -138,6 +193,40 @@
 #define CONST_SELECT_TIMEOUT_EPSILON_MS 5
 
 namespace f710 {
+    AxisDevice::AxisDevice(int eventid)
+            : event_number(eventid)
+    {
+        is_new_event = false;
+        latest_event_time = 0;
+        latest_event_value = 0;
+    }
+    /**
+     * Records the most recent event
+     * @param event_time  The time value in the most recent event
+     * @param value       The stick position in the most recent event
+     */
+    void AxisDevice::add_js_event(js_event event)
+    {
+        if((event.type != JS_EVENT_AXIS) || (event.number != event_number))
+            return;
+        Time tnow = Time::now();
+        if(!is_new_event) {
+            is_new_event = true;
+        }
+        latest_event_time = event.time;
+        latest_event_value = event.value;
+    }
+    /**
+     *  Returns {} if there is not a new event since the last call to this function
+     *  Returns the event if there has been one or more new events since the last call
+     */
+    js_event AxisDevice::get_latest_event()
+    {
+        is_new_event = false;
+        js_event ev = {.time=latest_event_time, .value=latest_event_value, .type=JS_EVENT_AXIS, .number=(__u8) event_number};
+        return ev;
+    }
+
     /**
      * This struct is a convenient way to hold values that allow ongoing calculation of
      * what the timeout value should be for the next select call
@@ -322,7 +411,7 @@ namespace f710 {
                 throw F710SelectError();
             } else if (select_out == 0) {
                 auto left_value = -1 * this->m_controller_state->m_left.get_latest_event().value;
-                auto right_value = -1 * this->m_controller_state->m_left.get_latest_event().value;
+                auto right_value = -1 * this->m_controller_state->m_right.get_latest_event().value;
                 auto toggle = (1 == this->m_controller_state->m_button.get_latest_event().value);
                 on_event_function(left_value, right_value, toggle);
                 tv = to_context.after_select_timedout();
@@ -356,14 +445,14 @@ namespace f710 {
                                 event.time,
                                 event.number, event.value, event.type);
 
-                    cstate->apply_init_event(event);
+//                    cstate->apply_init_event(event);
                     m_button_count++;
                     break;
                 case JS_EVENT_AXIS | JS_EVENT_INIT: {
                     RBL_LOG_FMT("js_event_init_axis time:%f event number: %d value: %d type: %d",
                                 event.time / 1000.0,
                                 event.number, event.value, event.type);
-                    cstate->apply_init_event(event);
+//                    cstate->apply_init_event(event);
                     m_axis_count++;
                 }
                     break;
@@ -408,7 +497,7 @@ namespace f710 {
                     cstate->apply_event(event);
                 break;
                 case JS_EVENT_AXIS: {
-                    RBL_LOG_FMT("Axes time:%f event number: %d value: %d type: %d", event.time / 1000.0,
+                    RBL_LOG_FMT("Axis time:%f event number: %d value: %d type: %d", event.time / 1000.0,
                                 event.number, event.value, event.type);
                     cstate->apply_event(event);
                 }
