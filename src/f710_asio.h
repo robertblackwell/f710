@@ -6,6 +6,7 @@
 #include <cinttypes>
 #include <functional>
 #include <dirent.h>
+#include <boost/asio.hpp>
 #include <fcntl.h>
 #include <climits>
 #include <vector>
@@ -150,12 +151,23 @@ namespace f710 {
             void run(std::function<void(int, int, bool)> on_event_function);
 
         private:
-            int read_init_events(int fd, ControllerState *cstate);
+            void start_read();
+            void handle_read(const boost::system::error_code& ec, std::size_t length) const;
+            void handle_timer();
 
+            void handle_init_event(js_event event, ControllerState *cstate);
+            void handle_event(js_event event, ControllerState *cstate);
+
+            int read_init_events(int fd, ControllerState *cstate);
             int read_events(int fd, ControllerState *cstate);
 
             bool m_is_open;
             int m_fd;
+            js_event m_js_event;
+            std::function<void(int, int, bool)> m_on_event_function;
+            boost::asio::io_context m_io_context;
+            boost::asio::serial_port m_serial_port;
+            boost::asio::steady_timer m_timer;
             int m_button_count;
             int m_axis_count;
             bool m_initialize_done;

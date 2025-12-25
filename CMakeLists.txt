@@ -17,3 +17,16 @@ add_executable(f710
 )
 target_include_directories(f710  PUBLIC ./  ./src)
 #target_compile_definitions(f710 PUBLIC RBL_LOG_ENABLED RBL_LOG_ALLOW_GLOBAL)
+
+add_executable(f710_asio
+        src/main.cpp
+        src/f710_time.h
+        src/f710_asio.h
+        src/f710_asio.cpp
+        src/f710_helpers.cpp
+        src/f710_helpers.h
+        rbl/logger.cpp
+        rbl/logger.h
+)
+target_include_directories(f710_asio  PUBLIC ./  ./src)
+#target_compile_definitions(f710 PUBLIC RBL_LOG_ENABLED RBL_LOG_ALLOW_GLOBAL)
