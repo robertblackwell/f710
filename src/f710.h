@@ -145,9 +145,9 @@ namespace f710 {
         class F710 {
         public:
             F710() = delete;
-            explicit F710(std::string device_path);
+            explicit F710(std::string device_path,std::function<void(int, int, bool)> on_event_function);
 
-            void run(std::function<void(int, int, bool)> on_event_function);
+            void run();
 
         private:
             int read_init_events(int fd, ControllerState *cstate);
@@ -159,6 +159,7 @@ namespace f710 {
             int m_button_count;
             int m_axis_count;
             bool m_initialize_done;
+            std::function<void(int, int, bool)> m_on_event_function;
             std::string m_joy_dev;
             std::string m_joy_dev_name;
             ControllerState *m_controller_state;

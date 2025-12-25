@@ -14,17 +14,25 @@ float scale(bool high_gear, int value) {
     }
     return pwm;
 }
+void cb(int left, int right, bool onoff) {
+    printf("from main left: %d right: %d toggle: %d\n", left, right, (int)onoff);
+    auto pwm_left = scale(onoff, left);
+    auto pwm_right = scale(onoff, right);
+    printf("from main left: %d pwm_left: %f  right: %d pwm_right: %f toggle: %d\n", left, pwm_left, right, pwm_right, (int)onoff);
+}
 int main(int argc, char **argv) {
     try {
-        f710::F710 logitech_f710{"js0"};
-        logitech_f710.run([](int left, int right, bool onoff) {
+        auto cb2 = [](int left, int right, bool onoff) {
             printf("from main left: %d right: %d toggle: %d\n", left, right, (int)onoff);
 #if 1
             auto pwm_left = scale(onoff, left);
             auto pwm_right = scale(onoff, right);
             printf("from main left: %d pwm_left: %f  right: %d pwm_right: %f toggle: %d\n", left, pwm_left, right, pwm_right, (int)onoff);
 #endif
-        });
+        };
+        f710::F710 logitech_f710{"js0", cb};
+        logitech_f710.run();
+
     } catch(const f710::F710Exception e) {
         printf("F710Exception %s", e.what());
     } catch(...) {

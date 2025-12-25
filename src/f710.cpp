@@ -384,8 +384,9 @@ namespace f710 {
         }
     };
 #endif
-    f710::F710::F710(std::string device_path)
-            : m_fd(-1), m_controller_state(nullptr), m_axis_count(0), m_button_count(0),m_initialize_done(false)
+    f710::F710::F710(std::string device_path, std::function<void(int, int, bool)> on_event_function)
+            : m_fd(-1), m_controller_state(nullptr), m_axis_count(0), m_button_count(0),m_initialize_done(false),
+            m_on_event_function(on_event_function)
     {
         m_joy_dev_name = device_path;
         m_is_open = false;
@@ -395,7 +396,7 @@ namespace f710 {
                 AxisDevice(D_AXIS_RIGHT_STICK_FWD_BKWD_NUMBER), ToggleButton(D_BUTTON_A));
     }
 
-    void f710::F710::run(std::function<void(int, int, bool)> on_event_function)
+    void f710::F710::run()
     {
         fd_set set;
         int f710_fd;
@@ -414,7 +415,7 @@ namespace f710 {
                 auto left_value = -1 * this->m_controller_state->m_left.get_latest_event().value;
                 auto right_value = -1 * this->m_controller_state->m_right.get_latest_event().value;
                 auto toggle = (1 == this->m_controller_state->m_button.get_latest_event().value);
-                on_event_function(left_value, right_value, toggle);
+                m_on_event_function(left_value, right_value, toggle);
                 tv = to_context.after_select_timedout();
             } else {
                 if (FD_ISSET(f710_fd, &set)) {

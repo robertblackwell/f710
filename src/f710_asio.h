@@ -146,9 +146,9 @@ namespace f710 {
         class F710 {
         public:
             F710() = delete;
-            explicit F710(std::string device_path);
+            explicit F710(std::string device_path, std::function<void(int, int, bool)> on_event_function);
 
-            void run(std::function<void(int, int, bool)> on_event_function);
+            void run();
 
         private:
             void start_read();
@@ -164,7 +164,7 @@ namespace f710 {
             bool m_is_open;
             int m_fd;
             js_event m_js_event;
-            std::function<void(int, int, bool)> m_on_event_function;
+            std::function<void(int, int, bool)>& m_on_event_function;
             boost::asio::io_context m_io_context;
             boost::asio::serial_port m_serial_port;
             boost::asio::steady_timer m_timer;

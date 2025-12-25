@@ -29,4 +29,4 @@ add_executable(f710_asio
         rbl/logger.h
 )
 target_include_directories(f710_asio  PUBLIC ./  ./src)
-#target_compile_definitions(f710 PUBLIC RBL_LOG_ENABLED RBL_LOG_ALLOW_GLOBAL)
+#target_compile_definitions(f710_asio PUBLIC RBL_LOG_ENABLED RBL_LOG_ALLOW_GLOBAL)

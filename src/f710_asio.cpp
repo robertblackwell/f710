@@ -384,12 +384,13 @@ namespace f710 {
         }
     };
 #endif
-    f710::F710::F710(std::string device_path)
+    f710::F710::F710(std::string device_path, std::function<void(int, int, bool)> on_event_function)
             : m_fd(open_fd_non_blocking(device_path)),
                 m_io_context(boost::asio::io_context()),
                 m_serial_port(boost::asio::serial_port(m_io_context, m_fd)),
                 m_timer(m_io_context, std::chrono::milliseconds(500)),
                 m_controller_state(nullptr),
+                m_on_event_function(on_event_function),
                 m_axis_count(0),
                 m_button_count(0),
                 m_initialize_done(false)
@@ -412,7 +413,7 @@ namespace f710 {
         char bb[sizeof(js_event)];
         char* bbptr = &bb[0];
 
-        boost::asio::async_read(m_serial_port, boost::asio::buffer(&bb, sizeof(js_event)), [this](const boost::system::error_code& ec, std::size_t length) {
+        boost::asio::async_read(m_serial_port, boost::asio::buffer(&(m_js_event), sizeof(js_event)), [this](const boost::system::error_code& ec, std::size_t length) {
             auto p = &this->m_js_event;
             if (!ec) {
                 if (length != sizeof(js_event)) {
@@ -429,14 +430,13 @@ namespace f710 {
             boost::asio::post(m_io_context, [this]() {this->start_read();});
         });
     }
-    void f710::F710::run(std::function<void(int, int, bool)> on_event_function)
+    void f710::F710::run()
     {
-        m_on_event_function = on_event_function;
-        exit_guard::Guard guard([this]() {close(this->m_fd);});
         boost::asio::post(m_io_context, [this]() {this->start_read();});
-        boost::asio::post(m_io_context, [this]() {this->handle_timer();});
+        boost::asio::post(m_io_context, [this]() {
+            m_timer.async_wait([this](const boost::system::error_code& ec){this->handle_timer();});
+        });
         m_io_context.run();
-        close(m_fd);
     }
     void f710::F710::handle_timer()
     {
@@ -444,6 +444,9 @@ namespace f710 {
         auto right_value = -1 * this->m_controller_state->m_right.get_latest_event().value;
         auto toggle = (1 == this->m_controller_state->m_button.get_latest_event().value);
         m_on_event_function(left_value, right_value, toggle);
+        boost::asio::post(m_io_context, [this]() {
+            m_timer.async_wait([this](const boost::system::error_code& ec){this->handle_timer();});
+        });
         // tv = to_context.after_select_timedout();
     }
     void f710::F710::handle_init_event(js_event event, ControllerState* cstate)
