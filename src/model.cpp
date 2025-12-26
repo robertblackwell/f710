@@ -100,20 +100,61 @@ js_event f710::ToggleButton::get_latest_event() {
 }
 
 f710::ControllerState::ControllerState(AxisDevice left, AxisDevice right, ToggleButton button)
-        : m_left(left), m_right(right), m_button(button)
+        : m_left(left), m_right(right), m_button(button), button_count(0), axis_count(0)
 {
+}
+bool f710::ControllerState::initialization_done() {
+    return (button_count == 12)&&(axis_count == 6);
 }
 
 void f710::ControllerState::apply_event(js_event event)
 {
+    if (!initialization_done()) {
+        switch (event.type) {
+        case JS_EVENT_INIT | JS_EVENT_BUTTON:
+            RBL_LOG_FMT("js_event_init_button time: %d number: %d value: %d type: %Xh",
+                        event.time,
+                        event.number, event.value, event.type);
 
-    m_left.add_js_event(event);
-    m_right.add_js_event(event);
-    m_button.apply_event(event);
+            button_count++;
+            break;
+        case JS_EVENT_AXIS | JS_EVENT_INIT: {
+            RBL_LOG_FMT("js_event_init_axis time:%f event number: %d value: %d type: %d",
+                        event.time / 1000.0,
+                        event.number, event.value, event.type);
+            axis_count++;
+        }
+        default:
+            break;
+        }
+    } else {
+        m_left.add_js_event(event);
+        m_right.add_js_event(event);
+        m_button.apply_event(event);
+    }
 }
 
 void f710::ControllerState::apply_init_event(js_event event)
 {
+    assert(0);
+    switch (event.type) {
+        case JS_EVENT_INIT | JS_EVENT_BUTTON:
+            RBL_LOG_FMT("js_event_init_button time: %d number: %d value: %d type: %Xh",
+                        event.time,
+                        event.number, event.value, event.type);
+
+            button_count++;
+            break;
+        case JS_EVENT_AXIS | JS_EVENT_INIT: {
+            RBL_LOG_FMT("js_event_init_axis time:%f event number: %d value: %d type: %d",
+                        event.time / 1000.0,
+                        event.number, event.value, event.type);
+            axis_count++;
+        }
+        default:
+            break;
+    }
+
     m_left.add_js_event(event);
     m_right.add_js_event(event);
     m_button.apply_event(event);

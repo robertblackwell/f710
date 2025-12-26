@@ -79,10 +79,14 @@ namespace f710 {
     /// in which our application has an interest.
     ///
     struct ControllerState {
+        int button_count;
+        int axis_count;
+
         AxisDevice m_left;
         AxisDevice m_right;
         ToggleButton m_button;
         ControllerState(AxisDevice left, AxisDevice right, ToggleButton button);
+        bool initialization_done();
         void apply_event(js_event event);
         void apply_init_event(js_event event);
     };
