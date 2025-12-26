@@ -1,11 +1,10 @@
-#ifndef f710_TIME_H
-#define f710_TIME_H
+#ifndef H_f710_TIME_H
+#define H_f710_TIME_H
 
-#include "f710.h"
-#include <memory>
-#include <cstring>
-#include <string>
 #include <cinttypes>
+#include <cstring>
+#include <memory>
+#include <string>
 
 #include <dirent.h>
 #include <fcntl.h>
@@ -22,49 +21,6 @@
 #include <ctime>
 
 namespace f710 {
-#if 0
-    struct Time {
-        time_t secs;
-        suseconds_t u_secs;
-
-        Time() = default;
-
-        explicit Time(timeval tval) : secs(tval.tv_sec), u_secs(tval.tv_usec) {}
-
-        [[nodiscard]] bool is_zero() const {
-            return (secs == 0) && (u_secs == 0);
-        }
-
-        static Time from_ms(uint64_t add_ms) {
-            Time t{};
-            t.secs = (time_t) add_ms / 1000;
-            t.u_secs = ((suseconds_t) add_ms % 1000) * 1000;
-            return t;
-        }
-
-        static Time now() {
-            struct timeval tv{0};
-            Time t{};
-            gettimeofday(&tv, nullptr);
-            t.secs = tv.tv_sec;
-            t.u_secs = tv.tv_usec;
-            return t;
-        }
-
-        Time add_ms(uint64_t ms) {
-            Time t({this->secs, this->u_secs});
-            t.secs += (time_t) ms / 1000;
-            suseconds_t u = t.u_secs + (time_t) (ms % 1000) * 1000;
-            t.secs += u / 1000000;
-            t.u_secs = u % 1000000;
-            return t;
-        }
-
-        static bool is_after(Time t1, Time t2) {
-            return (t1.secs > t2.secs) || ((t1.secs == t2.secs) && (t1.u_secs > t2.u_secs));
-        }
-    };
-#endif
     struct Time {
         uint64_t  millisecs;
 

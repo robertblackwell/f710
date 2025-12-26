@@ -1,10 +1,7 @@
-
-// \author: Blaise Gassend
-#include "f710.h"
-#include <memory>
-#include <cstring>
-#include <string>
 #include <cinttypes>
+#include <cstring>
+#include <memory>
+#include <string>
 
 #include <dirent.h>
 #include <fcntl.h>
