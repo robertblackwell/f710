@@ -29,12 +29,15 @@ std::string format_time_now()
     auto now = std::chrono::time_point_cast<milliseconds>(std::chrono::system_clock::now());
     std::string s = std::format("{:%T}", now);
     return s;
-    // std::time_t now = std::time(nullptr);
-    // std::tm* tm = std::localtime(&now);
-    // char buffer[100];
-    // std::strftime(buffer, sizeof(buffer), "%M:%S", tm);
-    // return buffer;
 }
+
+///
+/// This function is called by the Reader instance so that the current state of the controller can be saved for
+/// further processing. The cb() function runs on the same thread as the io_context which prevents the
+/// f710::ControllerState instance will not change during the call to cb().
+///
+/// Any state information required after the call to cb() completes must be saved during the cb() cal.
+///
 void cb(f710::ControllerState& state) {
     auto left = -1 * state.m_left.latest_event_value;
     auto right = -1 * state.m_right.latest_event_value;
